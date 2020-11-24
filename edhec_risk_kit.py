@@ -4,6 +4,7 @@ import scipy.stats
 from scipy.stats import norm
 from scipy.optimize import minimize
 import matplotlib.pyplot as plt
+import ipywidgets as widgets
 
 def drawdown(return_series : pd.Series):
     """Takes a time series of asset returns.
@@ -440,16 +441,6 @@ def show_gbm(n_scenarios, mu, sigma):
     ax.axhline(y=s_0, ls=':', color='black')
     # draw a dot at the origin
     ax.plot(0, s_0, marker='o', color='darkred', alpha=0.2)
-
-cppi_controls = widgets.interactive(show_cppi,
-                                    n_scenarios=widgets.IntSlider(min=1, max=1000, step=5, value=50),
-                                    mu=(0., +.2, 0.01),
-                                    sigma=(0, .30, .05),
-                                    floor=(0, 2, .1),
-                                    m=(1, 5, .5),
-                                    riskfree_rate=(0, .05, .01),
-                                    y_max=widgets.IntSlider(min=0, max=100, step=1, value=100, description='Zoom Y Axis')
-                                   )
 
 def show_cppi(n_scenarios=50, mu=0.07, sigma=0.15, m=3, floor=0., riskfree_rate=0.03, steps_per_year=12, y_max=100):
     """
