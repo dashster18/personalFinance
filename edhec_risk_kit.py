@@ -495,3 +495,26 @@ cppi_controls = widgets.interactive(show_cppi,
                                     steps_per_year=widgets.IntSlider(min=1, max=12, step=1, value=12, description='Rebals/Year'),
                                     y_max=widgets.IntSlider(min=0, max=100, step=1, value=100, description='Zoom Y Axis')
                                    )
+
+def discount(t, r):
+    """
+    Compute the price of a pure discount bond that pays a dollar at time t, given interest rate r
+    """
+    return (1+r)**(-t)
+
+def pv(l, r):
+    """
+    Computes the present value of a sequence of liabilities
+    l is a indexed by the time, and teh values are the amounts of each liability
+    r is the interest rate
+    returns the present value of the sequence
+    """
+    dates = l.index
+    discounts = discount(dates, r)
+    return (discounts * l).sum()
+
+def funding_ratio(assets, liabilities, r):
+    """
+    Computes the funding ratio fo some assets given liabilities and interest rate
+    """
+    return assets / pv(liabilities, r)
