@@ -499,20 +499,24 @@ cppi_controls = widgets.interactive(show_cppi,
 
 def discount(t, r):
     """
-    Compute the price of a pure discount bond that pays a dollar at time t, given interest rate r
+    Compute the price of a pure discount bond that pays a dollar at time period t
+    and r is the per-period interest rate
+    returns a |t| x |r| Series or DataFrame
+    r can be a float, Series, or DataFrame
+    returns a DataFrame indexed by t
     """
-    return (1+r)**(-t)
+    discounts = pd.DataFrame([(1+r)**-i for i in t])
+    discounts.index = t
+    return discounts
 
-def pv(l, r):
+def pv(flows, r):
     """
-    Computes the present value of a sequence of liabilities
-    l is a indexed by the time, and the values are the amounts of each liability
-    r is the interest rate
-    returns the present value of the sequence
+    Compute the present value of a sequence of cash flows given by the time (as an index) and amounts
+    r can be a scalar, or a Series or DataFrame with the number of rows matching the num of rows in flows
     """
-    dates = l.index
+    dates = flows.index
     discounts = discount(dates, r)
-    return (discounts * l).sum()
+    return discounts.multiply(flows, axis='rows').sum()
 
 def funding_ratio(assets, liabilities, r):
     """
@@ -588,11 +592,39 @@ def bond_cash_flows(maturity, principal=100, coupon_rate=0.03, coupons_per_year=
 
 def bond_price(maturity, principal=100, coupon_rate=0.03, coupons_per_year=12, discount_rate=0.03):
     """
-    Price a bond based on bond parameters maturity, principal, coupon rate, and coupons_per_year
+    Computes the price of a bond that pays regular coupons until maturity
+    at which time the principal and the final coupon is returned
+    This is not designed to be efficient, rather,
+    it is to illustrate the underlying principle behind bond pricing!
+    If discount_rate is a DataFrame, then this is assumed to be the rate on each coupon date
+    and the bond value is computed over time.
+    i.e. The index of the discount_rate DataFrame is assumed to be the coupon number
     """
-    cash_flows = bond_cash_flows(maturity, principal, coupon_rate, coupons_per_year)
-    return pv(cash_flows, discount_rate/coupons_per_year)
+    if isinstance(discount_rate, pd.DataFrame):
+        pricing_dates = discount_rate.index
+        prices = pd.DataFrame(index=pricing_dates, columns=discount_rate.columns)
+        for t in pricing_dates:
+            prices.loc[t] = bond_price(maturity-t/coupons_per_year, principal, coupon_rate, coupons_per_year, discount_rate.loc[t])
+        return prices
+    else: # base case ... single time period
+        if maturity <= 0: 
+            return principal + principal*coupon_rate/coupons_per_year
+        cash_flows = bond_cash_flows(maturity, principal, coupon_rate, coupons_per_year)
+        return pv(cash_flows, discount_rate/coupons_per_year)
 
+def bond_total_return(monthly_prices, principal, coupon_rate, coupons_per_year):
+    """
+    Computes the total return of a Bond based on monthly bond prices and coupon payments
+    Assumes that dividends (coupons) are paid out at teh end of the period (e.g. end of 3 months for quarterly div)
+    and that dividends are reinvested in the bond
+    """
+    coupons = pd.DataFrame(data=0, index=monthly_prices.index, columns=monthly_prices.columns)
+    t_max = monthly_prices.index.max()
+    pay_date = np.linspace(12/coupons_per_year, t_max, int(coupons_per_year*t_max/12), dtype=int)
+    coupons.iloc[pay_date] = principal*coupon_rate/coupons_per_year
+    total_returns = (monthly_prices + coupons) / monthly_prices.shift() - 1
+    return total_returns.dropna()
+    
 def macaulay_duration(flows, discount_rate):
     """
     Computes the Macaulay Duration of a sequence of cash flows
