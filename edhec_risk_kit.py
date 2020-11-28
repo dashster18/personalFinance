@@ -6,6 +6,7 @@ from scipy.optimize import minimize
 import matplotlib.pyplot as plt
 import ipywidgets as widgets
 import math
+import statsmodels.api as sm
 
 def drawdown(return_series : pd.Series):
     """Takes a time series of asset returns.
@@ -27,59 +28,86 @@ def get_ffme_returns():
     """
     Load the Fama-French Dataset for the returns of the Top and Bottom Deciles by MarketCap
     """
-    me_m = pd.read_csv('data/Portfolios_Formed_on_ME_monthly_EW.csv',
-                        header=0, index_col=0, na_values=-99.99)
+    me_m = pd.read_csv("data/Portfolios_Formed_on_ME_monthly_EW.csv",
+                       header=0, index_col=0, na_values=-99.99)
     rets = me_m[['Lo 10', 'Hi 10']]
     rets.columns = ['SmallCap', 'LargeCap']
-    rets /= 100
+    rets = rets/100
     rets.index = pd.to_datetime(rets.index, format="%Y%m").to_period('M')
     return rets
+
+def get_fff_returns():
+    """
+    Load the Fama-French Research Factor Monthly Dataset
+    """
+    rets = pd.read_csv("data/F-F_Research_Data_Factors_m.csv",
+                       header=0, index_col=0, na_values=-99.99)/100
+    rets.index = pd.to_datetime(rets.index, format="%Y%m").to_period('M')
+    return rets
+
 
 def get_hfi_returns():
     """
     Load and format the EDHEC Hedge Fund Index Returns
     """
-    hfi = pd.read_csv('data/edhec-hedgefundindices.csv',
-                        header=0, index_col=0, parse_dates=True)
-    hfi /= 100
+    hfi = pd.read_csv("data/edhec-hedgefundindices.csv",
+                      header=0, index_col=0, parse_dates=True)
+    hfi = hfi/100
     hfi.index = hfi.index.to_period('M')
     return hfi
+
+def get_ind_file(filetype):
+    """
+    Load and format the Ken French 30 Industry Portfolios files
+    """
+    known_types = ["returns", "nfirms", "size"]
+    if filetype not in known_types:
+        raise ValueError(f"filetype must be one of:{','.join(known_types)}")
+    if filetype == "returns":
+        name = "vw_rets"
+        divisor = 100
+    elif filetype == "nfirms":
+        name = "nfirms"
+        divisor = 1
+    elif filetype == "size":
+        name = "size"
+        divisor = 1
+                         
+    ind = pd.read_csv(f"data/ind30_m_{name}.csv", header=0, index_col=0)/divisor
+    ind.index = pd.to_datetime(ind.index, format="%Y%m").to_period('M')
+    ind.columns = ind.columns.str.strip()
+    return ind
 
 def get_ind_returns():
     """
     Load and format the Ken French 30 Industry Portfolios Value Weighted Monthly Returns
     """
-    ind = pd.read_csv('data/ind30_m_vw_rets.csv', header=0, index_col=0, parse_dates=True)/100
-    ind.index = pd.to_datetime(ind.index, format="%Y%m").to_period('M')
-    ind.columns = ind.columns.str.strip()
-    return ind
-
-def get_ind_size():
-    """
-    """
-    ind = pd.read_csv('data/ind30_m_size.csv', header=0, index_col=0, parse_dates=True)
-    ind.index = pd.to_datetime(ind.index, format="%Y%m").to_period('M')
-    ind.columns = ind.columns.str.strip()
-    return ind
+    return get_ind_file("returns")
 
 def get_ind_nfirms():
     """
+    Load and format the Ken French 30 Industry Portfolios Average number of Firms
     """
-    ind = pd.read_csv('data/ind30_m_nfirms.csv', header=0, index_col=0, parse_dates=True)
-    ind.index = pd.to_datetime(ind.index, format="%Y%m").to_period('M')
-    ind.columns = ind.columns.str.strip()
-    return ind
+    return get_ind_file("nfirms")
 
+def get_ind_size():
+    """
+    Load and format the Ken French 30 Industry Portfolios Average size (market cap)
+    """
+    return get_ind_file("size")
+
+                         
 def get_total_market_index_returns():
-    ind_returns = get_ind_returns()
+    """
+    Load the 30 industry portfolio data and derive the returns of a capweighted total market index
+    """
     ind_nfirms = get_ind_nfirms()
     ind_size = get_ind_size()
-    
-    # Compute market cap weights and index
+    ind_return = get_ind_returns()
     ind_mktcap = ind_nfirms * ind_size
     total_mktcap = ind_mktcap.sum(axis=1)
-    ind_capweight = ind_mktcap.divide(total_mktcap, axis=0)
-    total_market_return = (ind_capweight * ind_returns).sum(axis=1)
+    ind_capweight = ind_mktcap.divide(total_mktcap, axis="rows")
+    total_market_return = (ind_capweight * ind_return).sum(axis="columns")
     return total_market_return
     
 def skewness(r):
@@ -165,6 +193,9 @@ def cvar_historic(r, level=5):
     else:
         raise TypeError("Expected r to be a Series or DataFrame")
 
+def compound(r):
+    return (1+r).prod() - 1
+        
 def annualize_rets(r, periods_per_year):
     """
     Annualizes a set of returns
@@ -765,3 +796,19 @@ def terminal_stats(rets, floor=0.8, cap=np.inf, name='Stats'):
         'e_surplus': e_surplus
     }, orient='index', columns=[name])
     return sum_stats
+
+def regress(dependent_variable, explanatory_variables, alpha=True):
+    """
+    Runs a linear regression to decompose the dependent variable into the explanatory variables
+    returns an object of type statsmodel's RegressionResults on which you can call
+       .summary() to print a full summary
+       .params for the coefficients
+       .tvalues and .pvalues for the significance levels
+       .rsquared_adj and .rsquared for quality of fit
+    """
+    if alpha:
+        explanatory_variables = explanatory_variables.copy()
+        explanatory_variables["Alpha"] = 1
+    
+    lm = sm.OLS(dependent_variable, explanatory_variables).fit()
+    return lm
