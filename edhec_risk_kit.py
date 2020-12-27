@@ -24,6 +24,21 @@ def drawdown(return_series : pd.Series):
         "Drawdown": drawdowns
     })
 
+def get_ern_returns():
+    """
+    Load the EarlyRetirmentNow Monthly Returns Dataset
+    """
+    ern = pd.read_csv('data/EarlyRetirementNowSWRToolbox_MonthlyReturns_1871_to_09-2020.tsv', sep='\t')
+    monthly_return_cols = ['SPX-TR', '10Y BM', 'Cash']
+    rets = ern[monthly_return_cols].dropna().applymap(lambda s: float(s.replace('%', '')))/100
+
+    # Change index to monthly periods
+    idx = ern.apply(lambda row: str(row['Year']) + '-' + str(row['Month']), axis=1)
+    rets.index = pd.to_datetime(idx, format='%Y-%m')[:-1]
+    rets.index = rets.index.to_period('M')
+    
+    return rets
+
 def get_ffme_returns():
     """
     Load the Fama-French Dataset for the returns of the Top and Bottom Deciles by MarketCap
