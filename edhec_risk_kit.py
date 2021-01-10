@@ -129,9 +129,9 @@ def get_ind_market_caps(n_inds=30, weights=False):
 
 def get_total_market_index_returns(n_inds=30):
     """
-    Load the 30 industry portfolio data and derive the returns of a capweighted total market index
+    Load the industry portfolio data and derive the returns of a capweighted total market index
     """
-    ind_capweight = get_ind_market_caps(n_inds=n_inds)
+    ind_capweight = get_ind_market_caps(n_inds=n_inds, weights=True)
     ind_return = get_ind_returns(weighting="vw", n_inds=n_inds)
     total_market_return = (ind_capweight * ind_return).sum(axis="columns")
     return total_market_return
